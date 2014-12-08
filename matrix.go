@@ -47,77 +47,20 @@ func (self *Matrix) Get(i, j int) float64 {
 
 }
 
-func (self *Matrix) ParTimes(scnd *Matrix) *Matrix {
-	res := NewMatrix(self.rows, scnd.cols)
-	parTimes2(self, scnd, res)
-	return res
-}
-
-func parTimes2(A, B, C *Matrix) {
-	const threshold = 8
-
-	currentGoroutineCount := 1
-	maxGoroutines := runtime.GOMAXPROCS(0) + 2
-
-	println("maxGoroutines",maxGoroutines)
-
-	var aux func(sync chan bool, A, B, C *Matrix, rs, re, cs, ce, ks, ke int)
-	aux = func(sync chan bool, A, B, C *Matrix, rs, re, cs, ce, ks, ke int) {
-		dr := re - rs
-		dc := ce - cs
-		dk := ke - ks
-		switch {
-		case currentGoroutineCount < maxGoroutines && dr >= dc && dr >= dk && dr >= threshold:
-			sync0 := make(chan bool, 1)
-			rm := (rs + re) / 2
-			currentGoroutineCount++
-			go aux(sync0, A, B, C, rs, rm, cs, ce, ks, ke)
-			aux(nil, A, B, C, rm, re, cs, ce, ks, ke)
-			<-sync0
-			currentGoroutineCount--
-		case currentGoroutineCount < maxGoroutines && dc >= dk && dc >= dr && dc >= threshold:
-			sync0 := make(chan bool, 1)
-			cm := (cs + ce) / 2
-			currentGoroutineCount++
-			go aux(sync0, A, B, C, rs, re, cs, cm, ks, ke)
-			aux(nil, A, B, C, rs, re, cm, ce, ks, ke)
-			<-sync0
-			currentGoroutineCount--
-		case currentGoroutineCount < maxGoroutines && dk >= dc && dk >= dr && dk >= threshold:
-			km := (ks + ke) / 2
-			aux(nil, A, B, C, rs, re, cs, ce, ks, km)
-			aux(nil, A, B, C, rs, re, cs, ce, km, ke)
-		default:
-			for row := rs; row < re; row++ {
-				sums := C.elems[row*C.step : (row+1)*C.step]
-				for k := ks; k < ke; k++ {
-					for col := cs; col < ce; col++ {
-						sums[col] += A.elems[row*A.step+k] * B.elems[k*B.step+col]
-					}
-				}
-			}
-		}
-		if sync != nil {
-			sync <- true
-		}
-	}
-
-	aux(nil, A, B, C, 0, A.rows, 0, B.cols, 0, A.cols)
-
-	return
-}
-
-func ParallelProduct(A, B *Matrix) (C *Matrix) {
+func ParallelProduct(A, B *Matrix) *Matrix {
 	if A.cols != B.rows {
 		return nil
 	}
 
-	C = NewMatrix(A.rows, B.cols)
+	C := NewMatrix(A.rows, B.cols)
 
 	in := make(chan int)
 	quit := make(chan bool)
 
-	dotRowCol := func() {
+	threads := runtime.GOMAXPROCS(0) * 2
+
+	for i := 0; i < threads; i++ {
+		go func() {
 		for {
 			select {
 			case i := <-in:
@@ -134,12 +77,7 @@ func ParallelProduct(A, B *Matrix) (C *Matrix) {
 				return
 			}
 		}
-	}
-
-	threads := 2
-
-	for i := 0; i < threads; i++ {
-		go dotRowCol()
+	}()
 	}
 
 	for i := 0; i < A.rows; i++ {
@@ -150,7 +88,7 @@ func ParallelProduct(A, B *Matrix) (C *Matrix) {
 		quit <- true
 	}
 
-	return
+	return C
 }
 
 func Equals(A, B *Matrix) bool {
