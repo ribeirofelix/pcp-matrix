@@ -61,23 +61,23 @@ func ParallelProduct(A, B *Matrix) *Matrix {
 
 	for i := 0; i < threads; i++ {
 		go func() {
-		for {
-			select {
-			case i := <-in:
-				sums := make([]float64, B.cols)
-				for k := 0; k < A.cols; k++ {
-					for j := 0; j < B.cols; j++ {
-						sums[j] += A.Get(i, k) * B.Get(k, j)
+			for {
+				select {
+				case i := <-in:
+					sums := make([]float64, B.cols)
+					for k := 0; k < A.cols; k++ {
+						for j := 0; j < B.cols; j++ {
+							sums[j] += A.Get(i, k) * B.Get(k, j)
+						}
 					}
+					for j := 0; j < B.cols; j++ {
+						C.Set(i, j, sums[j])
+					}
+				case <-quit:
+					return
 				}
-				for j := 0; j < B.cols; j++ {
-					C.Set(i, j, sums[j])
-				}
-			case <-quit:
-				return
 			}
-		}
-	}()
+		}()
 	}
 
 	for i := 0; i < A.rows; i++ {

@@ -19,7 +19,7 @@ func TestParallelProduct(t *testing.T) {
 		A := Normals(h, w)
 		B := Normals(w, h)
 
-		start := time.Now().UnixNano();
+		start := time.Now().UnixNano()
 		C := ParallelProduct(A, B)
 
 		end := time.Now().UnixNano()
